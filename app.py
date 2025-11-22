@@ -1,16 +1,14 @@
 import streamlit as st
-import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
-import time
 
 st.set_page_config(page_title="Pill Counter App", layout="wide")
 
 # Load Model
 model = YOLO("best.pt")
 
-# Custom CSS for Modern UI
+# Custom CSS
 st.markdown("""
 <style>
 .main {background: #0d1117; color: white;}
@@ -38,19 +36,24 @@ st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_a
 
 option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Real-time Camera"])
 
-# Helper Function to Count Classes
+# Corrected Class Mapping
+# YOLO CLASS 0 = CAPSULE
+# YOLO CLASS 1 = TABLET
+
 def get_counts(results):
-    pills = capsules = 0
+    tablets = capsules = 0
     for r in results[0].boxes:
         cls = int(r.cls[0])
         if cls == 0:
-            pills += 1
-        elif cls == 1:
             capsules += 1
-    return pills, capsules, pills + capsules
+        elif cls == 1:
+            tablets += 1
+    return tablets, capsules, tablets + capsules
 
 
-# IMAGE UPLOAD MODE ----------------------------------------------------------
+# --------------------------------------------------------------
+# IMAGE UPLOAD MODE
+# --------------------------------------------------------------
 if option == "Image Upload":
     st.subheader("📸 Upload an Image")
     uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
@@ -62,52 +65,38 @@ if option == "Image Upload":
         results = model(img_np)
         annotated = results[0].plot()
 
-        pills, capsules, total = get_counts(results)
+        tablets, capsules, total = get_counts(results)
 
         st.image(annotated, caption="Detection Results", use_column_width=True)
 
         st.markdown(f"""
         <div class="counter-box">
-        Tablets: {pills} <br>
+        Tablets: {tablets} <br>
         Capsules: {capsules} <br>
         <b>Total: {total}</b>
         </div>
         """, unsafe_allow_html=True)
 
 
-# REAL-TIME CAMERA MODE ------------------------------------------------------
+# --------------------------------------------------------------
+# REAL-TIME CAMERA MODE (MOBILE SUPPORTED)
+# --------------------------------------------------------------
 else:
     st.subheader("🎥 Real-time Detection")
-    camera = st.checkbox("Start Camera")
 
-    if camera:
-        frame_window = st.empty()
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # FIX for Windows
+    img = st.camera_input("Open Camera")
 
-        if not cap.isOpened():
-            st.error("❌ Camera not detected! Please check your webcam.")
-        else:
-            while camera:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("❌ Failed to read from camera!")
-                    break
+    if img:
+        image = Image.open(img).convert("RGB")
+        img_np = np.array(image)
 
-                results = model(frame)
-                pills, capsules, total = get_counts(results)
+        results = model(img_np)
+        annotated = results[0].plot()
 
-                annotated = results[0].plot()
+        tablets, capsules, total = get_counts(results)
 
-                cv2.putText(
-                    annotated,
-                    f"Tablets: {pills} | Capsules: {capsules} | Total: {total}",
-                    (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.9, (0, 255, 0), 2
-                )
-
-                frame_window.image(annotated, channels="BGR")
-                time.sleep(0.03)
-
-            cap.release()
-            cv2.destroyAllWindows()
+        st.image(
+            annotated,
+            caption=f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
+            use_column_width=True
+        )
