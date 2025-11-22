@@ -110,38 +110,31 @@
 #             </div>
 #             """, unsafe_allow_html=True)
 import streamlit as st
-from ultralytics import YOLO
-import cv2
 import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+from ultralytics import YOLO
 from PIL import Image
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
 st.set_page_config(page_title="Pill Counter App", layout="wide")
 
-# Load YOLO model
+# Load Model
 model = YOLO("best.pt")
 
-# Custom CSS
+# CSS
 st.markdown("""
 <style>
 .main {background: #0d1117; color: white;}
 .title {text-align: center; font-size: 38px; font-weight: bold; color: #4CAF50;}
-.counter-box {
-    padding: 15px;
-    background: #1e1e1e;
-    border-radius: 12px;
-    margin-top: 10px;
-    font-size: 20px;
-    color: white;
-    text-align: center;
-    border: 2px solid #4CAF50;
-}
+.counter-box {padding: 15px; background: #1e1e1e; border-radius: 12px; margin-top: 10px;
+ font-size: 20px; color: white; text-align: center; border: 2px solid #4CAF50;}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_allow_html=True)
 
-# YOLO Class Mapping: 0 = Capsule, 1 = Tablet
+option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Real-time Camera"])
+
+# Correct Class Mapping
 def get_counts(results):
     tablets = capsules = 0
     for r in results[0].boxes:
@@ -152,32 +145,41 @@ def get_counts(results):
             tablets += 1
     return tablets, capsules, tablets + capsules
 
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
-
-class VideoProcessor(VideoProcessorBase):
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        results = model(img)
+# IMAGE UPLOAD
+if option == "Image Upload":
+    st.subheader("📸 Upload an Image")
+    uploaded_file = st.file_uploader("Choose an image", type=["jpg","png","jpeg"])
+    if uploaded_file:
+        image = Image.open(uploaded_file).convert("RGB")
+        img_np = np.array(image)
+        results = model(img_np)
         annotated = results[0].plot()
-
         tablets, capsules, total = get_counts(results)
+        st.image(annotated, caption="Detection Results", use_column_width=True)
+        st.markdown(f"""
+        <div class="counter-box">
+        Tablets: {tablets} <br>
+        Capsules: {capsules} <br>
+        <b>Total: {total}</b>
+        </div>
+        """, unsafe_allow_html=True)
 
-        cv2.putText(annotated,
-                    f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+# REAL-TIME CAMERA
+else:
+    st.subheader("🎥 Real-time Detection")
 
-        return annotated
+    class VideoTransformer(VideoTransformerBase):
+        def transform(self, frame):
+            img = frame.to_ndarray(format="bgr24")
+            results = model(img)
+            tablets, capsules, total = get_counts(results)
+            annotated = results[0].plot()
+            # Add counts overlay
+            import cv2
+            cv2.putText(
+                annotated, f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
+                (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2
+            )
+            return annotated
 
-st.subheader("🎥 Real-time Detection (Mobile & Desktop Supported)")
-
-webrtc_streamer(
-    key="pill-counter",
-    mode="SENDRECV",
-    video_processor_factory=VideoProcessor,
-    rtc_configuration=RTC_CONFIGURATION,
-    media_stream_constraints={"video": True, "audio": False},
-    async_processing=True
-)
-
+    webrtc_streamer(key="pill-counter", video_transformer_factory=VideoTransformer)
