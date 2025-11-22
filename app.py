@@ -1,115 +1,111 @@
 import streamlit as st
-import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
+import time
 
 st.set_page_config(page_title="Pill Counter App", layout="wide")
 
 # Load Model
 model = YOLO("best.pt")
 
-# Custom CSS for Modern UI
+# Custom CSS
 st.markdown("""
 <style>
-    .main {background: #0d1117; color: white;}
-    .title {text-align: center; font-size: 38px; font-weight: bold; color: #4CAF50;}
-    .counter-box {
-        padding: 15px;
-        background: #1e1e1e;
-        border-radius: 12px;
-        margin-top: 10px;
-        font-size: 20px;
-        color: white;
-        text-align: center;
-        border: 2px solid #4CAF50;
-    }
+.main {background: #0d1117; color: white;}
+.title {text-align: center; font-size: 38px; font-weight: bold; color: #4CAF50;}
+.counter-box {
+    padding: 15px;
+    background: #1e1e1e;
+    border-radius: 12px;
+    margin-top: 10px;
+    font-size: 20px;
+    color: white;
+    text-align: center;
+    border: 2px solid #4CAF50;
+}
+.upload-box {
+    border: 2px dashed #4CAF50;
+    padding: 10px;
+    border-radius: 10px;
+    text-align: center;
+}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_allow_html=True)
 
+option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Real-time Camera"])
 
-# ---------------------------------------------------------
-# HELPER FUNCTION: Correct Class Mapping
-# ---------------------------------------------------------
+# Correct Class Mapping
 def get_counts(results):
     tablets = capsules = 0
     for r in results[0].boxes:
         cls = int(r.cls[0])
-        if cls == 1:      # Tablet
-            tablets += 1
-        elif cls == 0:    # Capsule
+        if cls == 0:
             capsules += 1
+        elif cls == 1:
+            tablets += 1
     return tablets, capsules, tablets + capsules
 
+# -------------------------
+# IMAGE UPLOAD MODE
+# -------------------------
+if option == "Image Upload":
+    st.subheader("📸 Upload an Image")
+    uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
 
-# ---------------------------------------------------------
-# IMAGE UPLOAD SECTION (FIRST)
-# ---------------------------------------------------------
-st.subheader("📸 Upload an Image")
+    if uploaded_file:
+        image = Image.open(uploaded_file).convert("RGB")
+        img_np = np.array(image)
 
-uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
+        results = model(img_np)
+        annotated = results[0].plot()
 
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    img_np = np.array(image)
+        tablets, capsules, total = get_counts(results)
 
-    results = model(img_np)
-    annotated = results[0].plot()
+        st.image(annotated, caption="Detection Results", use_column_width=True)
 
-    tablets, capsules, total = get_counts(results)
-
-    st.image(annotated, caption="Detection Results", use_column_width=True)
-
-    st.markdown(f"""
-    <div class="counter-box">
+        st.markdown(f"""
+        <div class="counter-box">
         Tablets: {tablets} <br>
         Capsules: {capsules} <br>
         <b>Total: {total}</b>
-    </div>
-    """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
+# -------------------------
+# REAL-TIME CAMERA MODE
+# -------------------------
+else:
+    st.subheader("🎥 Real-time Detection (Mobile Supported)")
 
+    capture_button = st.button("Capture Frame")
+    img_placeholder = st.empty()
+    result_placeholder = st.empty()
 
-# ---------------------------------------------------------
-# LIVE CAMERA SECTION (BELOW)
-# ---------------------------------------------------------
-st.subheader("🎥 Real-time Detection (Live Camera)")
+    if capture_button:
+        img = st.camera_input("Open Camera")
 
-camera = st.checkbox("Start Live Camera")
+        if img:
+            image = Image.open(img).convert("RGB")
+            img_np = np.array(image)
 
-if camera:
-    frame_window = st.empty()
-    cap = cv2.VideoCapture(0)
-
-    if not cap.isOpened():
-        st.error("❌ Camera not detected! Please check your webcam.")
-    else:
-        while camera:
-            ret, frame = cap.read()
-            if not ret:
-                st.error("❌ Failed to access camera!")
-                break
-
-            # Run YOLO
-            results = model(frame)
+            results = model(img_np)
+            annotated = results[0].plot()
 
             tablets, capsules, total = get_counts(results)
 
-            annotated = results[0].plot()
-
-            # Add text overlay
-            cv2.putText(
+            img_placeholder.image(
                 annotated,
-                f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.9, (0, 255, 0), 2
+                caption=f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
+                use_column_width=True
             )
 
-            # Display live video
-            frame_window.image(annotated, channels="BGR")
-
-        cap.release()
-        cv2.destroyAllWindows()
+            result_placeholder.markdown(f"""
+            <div class="counter-box">
+            Tablets: {tablets} <br>
+            Capsules: {capsules} <br>
+            <b>Total: {total}</b>
+            </div>
+            """, unsafe_allow_html=True)
