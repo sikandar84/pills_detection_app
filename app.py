@@ -24,81 +24,92 @@ st.markdown("""
         text-align: center;
         border: 2px solid #4CAF50;
     }
-    .upload-box {
-        border: 2px dashed #4CAF50;
-        padding: 10px;
-        border-radius: 10px;
-        text-align: center;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_allow_html=True)
 
-option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Real-time Camera"])
 
-# Helper Function to Count Classes
-# FIXED: Correct class mapping
+# ---------------------------------------------------------
+# HELPER FUNCTION: Correct Class Mapping
+# ---------------------------------------------------------
 def get_counts(results):
     tablets = capsules = 0
     for r in results[0].boxes:
         cls = int(r.cls[0])
-        if cls == 1:  # Tablet label
+        if cls == 1:      # Tablet
             tablets += 1
-        elif cls == 0:  # Capsule label
+        elif cls == 0:    # Capsule
             capsules += 1
     return tablets, capsules, tablets + capsules
 
 
-# IMAGE UPLOAD MODE ----------------------------------------------------------
-if option == "Image Upload":
-    st.subheader("📸 Upload an Image")
-    uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
+# ---------------------------------------------------------
+# IMAGE UPLOAD SECTION (FIRST)
+# ---------------------------------------------------------
+st.subheader("📸 Upload an Image")
 
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        img_np = np.array(image)
+uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
 
-        results = model(img_np)
-        annotated = results[0].plot()
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    img_np = np.array(image)
 
-        tablets, capsules, total = get_counts(results)
+    results = model(img_np)
+    annotated = results[0].plot()
 
-        st.image(annotated, caption="Detection Results", use_column_width=True)
+    tablets, capsules, total = get_counts(results)
 
-        st.markdown(f"""
-        <div class="counter-box">
-            Tablets: {tablets} <br>
-            Capsules: {capsules} <br>
-            <b>Total: {total}</b>
-        </div>
-        """, unsafe_allow_html=True)
+    st.image(annotated, caption="Detection Results", use_column_width=True)
+
+    st.markdown(f"""
+    <div class="counter-box">
+        Tablets: {tablets} <br>
+        Capsules: {capsules} <br>
+        <b>Total: {total}</b>
+    </div>
+    """, unsafe_allow_html=True)
 
 
-# REAL-TIME CAMERA MODE ------------------------------------------------------
-else:
-    st.subheader("🎥 Real-time Detection")
 
-    camera = st.checkbox("Start Camera")
+# ---------------------------------------------------------
+# LIVE CAMERA SECTION (BELOW)
+# ---------------------------------------------------------
+st.subheader("🎥 Real-time Detection (Live Camera)")
 
-    if camera:
-        frame_window = st.empty()
-        cap = cv2.VideoCapture(0)  # Webcam ON
+camera = st.checkbox("Start Live Camera")
 
+if camera:
+    frame_window = st.empty()
+    cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        st.error("❌ Camera not detected! Please check your webcam.")
+    else:
         while camera:
             ret, frame = cap.read()
             if not ret:
-                st.write("Camera not detected!")
+                st.error("❌ Failed to access camera!")
                 break
 
+            # Run YOLO
             results = model(frame)
+
             tablets, capsules, total = get_counts(results)
+
             annotated = results[0].plot()
 
-            cv2.putText(annotated, f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
-                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.9, (0, 255, 0), 2)
+            # Add text overlay
+            cv2.putText(
+                annotated,
+                f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9, (0, 255, 0), 2
+            )
 
+            # Display live video
             frame_window.image(annotated, channels="BGR")
 
         cap.release()
+        cv2.destroyAllWindows()
