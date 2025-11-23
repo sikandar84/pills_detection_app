@@ -1,13 +1,18 @@
 import streamlit as st
 import numpy as np
-from ultralytics import YOLO
 from PIL import Image
+
+# -------------------- Safe YOLO Import --------------------
+try:
+    from ultralytics import YOLO
+    model = YOLO("best.pt")   # ensure best.pt is inside the repo root
+except Exception as e:
+    st.error("❌ Failed to load YOLO model. Make sure 'best.pt' is in the app folder.")
+    st.error(str(e))
+    st.stop()
 
 # -------------------- Streamlit Page Setup --------------------
 st.set_page_config(page_title="Pill Counter App", layout="wide")
-
-# Load YOLO Model
-model = YOLO("best.pt")  # Make sure best.pt is in the same repo
 
 # -------------------- Custom CSS --------------------
 st.markdown("""
@@ -35,11 +40,7 @@ st.markdown("""
 
 st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_allow_html=True)
 
-# -------------------- Mode Selection --------------------
-option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Camera Snapshot"])
-
 # -------------------- Helper Function --------------------
-# YOLO CLASS 0 = CAPSULE, CLASS 1 = TABLET
 def get_counts(results):
     tablets = capsules = 0
     for r in results[0].boxes:
@@ -49,6 +50,9 @@ def get_counts(results):
         elif cls == 1:
             tablets += 1
     return tablets, capsules, tablets + capsules
+
+# -------------------- Mode Selection --------------------
+option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Camera Snapshot"])
 
 # -------------------- IMAGE UPLOAD MODE --------------------
 if option == "Image Upload":
@@ -60,7 +64,7 @@ if option == "Image Upload":
         img_np = np.array(image)
 
         results = model(img_np)
-        annotated = results[0].plot()
+        annotated = results[0].plot()  # numpy array
 
         tablets, capsules, total = get_counts(results)
 
