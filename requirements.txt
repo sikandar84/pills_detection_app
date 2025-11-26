@@ -1,11 +1,10 @@
-ultralytics==8.3.0
-opencv-python-headless
-streamlit
-torch
-torchvision
-pyyaml
+ultralytics==8.0.196
+opencv-python-headless==4.5.5.64
+streamlit==1.33.0
 Pillow
 numpy
+pyyaml
 
-
-
+# lightweight CPU torch (works on Streamlit Cloud)
+torch==2.0.0
+torchvision==0.15.1
