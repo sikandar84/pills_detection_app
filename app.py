@@ -2,154 +2,144 @@ import streamlit as st
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
+import requests
 import time
 from streamlit_lottie import st_lottie
-import requests
 
-# -------------------- Configuration & Assets --------------------
-st.set_page_config(page_title="PillScan Pro", layout="wide", initial_sidebar_state="collapsed")
+# -------------------- Configuration --------------------
+st.set_page_config(page_title="PillScan Pro", layout="wide", initial_sidebar_state="expanded")
 
+# --- Function to load Lottie animations with error handling ---
 def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except Exception:
         return None
-    return r.json()
 
-# Lottie Animations (Medical/Scanning theme)
-lottie_pill = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_5njp9vbg.json")
-lottie_scan = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_ndm890at.json")
+# Load Animations
+lottie_pill = load_lottieurl("https://lottie.host/80860541-118f-495f-9e8c-84381e4b868e/vV6kOonhGk.json") # Reliable URL
+lottie_scan = load_lottieurl("https://lottie.host/936a1662-d499-4d6a-861f-172c39e9487c/kP8U6v9F6u.json")
 
-# Load YOLO Model
+# --- Load YOLO Model (Cached to prevent reloading) ---
 @st.cache_resource
 def load_model():
     return YOLO("best.pt")
 
-model = load_model()
+try:
+    model = load_model()
+except Exception as e:
+    st.error(f"Error loading model: Make sure 'best.pt' is in the same folder as this script. Error: {e}")
+    st.stop()
 
-# -------------------- Advanced CSS --------------------
+# -------------------- Advanced UI Styling --------------------
 st.markdown("""
 <style>
-    /* Global Styles */
+    /* Gradient Background */
     .stApp {
-        background: radial-gradient(circle, #1a1c23 0%, #0d1117 100%);
+        background: radial-gradient(circle at top, #1a2a6c, #b21f1f, #fdbb2d);
+        background-attachment: fixed;
     }
     
-    /* Glassmorphism Card */
-    .metric-card {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 15px;
-        padding: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
+    /* Glassmorphism Effect */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 25px;
+        color: white;
         text-align: center;
-        transition: transform 0.3s ease;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        margin-bottom: 20px;
     }
-    .metric-card:hover {
-        transform: translateY(-5px);
-        border-color: #4CAF50;
-    }
-    
-    /* Title Animation */
-    @keyframes fadeInDown {
-        from { opacity: 0; transform: translateY(-20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .main-title {
-        font-family: 'Helvetica Neue', sans-serif;
-        font-size: 3rem;
+
+    h1 {
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
-        background: -webkit-linear-gradient(#4CAF50, #2E7D32);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        animation: fadeInDown 1s ease-out;
-    }
-    
-    /* Custom Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #161b22;
-        border-right: 1px solid #30363d;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------- Header Section --------------------
+# -------------------- Header --------------------
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    st_lottie(lottie_pill, height=150, key="pill_ani")
-    st.markdown('<h1 class="main-title">PILLSCAN PRO</h1>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #8b949e;'>AI-Powered Pharmaceutical Recognition & Counting</p>", unsafe_allow_html=True)
+    if lottie_pill:
+        st_lottie(lottie_pill, height=180, key="main_ani")
+    else:
+        st.markdown("<h1 style='text-align: center;'>💊</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: white;'>PILLSCAN PRO</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #f0f0f0;'>Advanced Pharmaceutical Computer Vision</p>", unsafe_allow_html=True)
 
-st.write("---")
-
-# -------------------- Sidebar & Logic --------------------
+# -------------------- Sidebar Controls --------------------
 with st.sidebar:
-    st.header("⚙️ Controls")
-    option = st.radio("Input Source", ["Upload Image", "Live Camera"], help="Choose how you want to capture the pills.")
-    conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.25)
-    st.info("Ensure lighting is bright for 99% accuracy.")
+    st.image("https://cdn-icons-png.flaticon.com/512/3028/3028573.png", width=100)
+    st.title("Settings")
+    mode = st.radio("Select Mode", ["📁 Upload Image", "📸 Camera Capture"])
+    conf_level = st.slider("AI Sensitivity (Confidence)", 0.1, 1.0, 0.25)
+    st.divider()
+    st.info("Tip: Use a plain, dark background for best results.")
 
-def process_image(img):
-    with st.spinner('🔬 Analyzing chemical signatures...'):
-        results = model(img, conf=conf_threshold)
-        
-        # Artificial slight delay for 'pro' feel
-        time.sleep(0.5) 
-        
-        tablets = 0
-        capsules = 0
-        for r in results[0].boxes:
-            cls = int(r.cls[0])
-            if cls == 0: capsules += 1
-            elif cls == 1: tablets += 1
-            
-        return results[0].plot(), tablets, capsules, tablets + capsules
-
-# -------------------- Main Interface --------------------
-source_img = None
-
-if option == "Upload Image":
-    source_img = st.file_uploader("📂 Drag and drop pill images here", type=["jpg", "jpeg", "png"])
+# -------------------- Logic & Processing --------------------
+source = None
+if mode == "📁 Upload Image":
+    source = st.file_uploader("Upload pill photo...", type=["jpg", "png", "jpeg"])
 else:
-    source_img = st.camera_input("📸 Capture snapshot")
+    source = st.camera_input("Take a photo of the pills")
 
-if source_img:
-    image = Image.open(source_img).convert("RGB")
-    annotated_img, tabs, caps, total = process_image(image)
-
-    # Dashboard Layout
-    res_col, stats_col = st.columns([2, 1])
-
-    with res_col:
-        st.image(annotated_img, caption="AI Vision Feedback", use_column_width=True)
-
-    with stats_col:
-        st.markdown("### 📊 Analysis Report")
+if source:
+    img = Image.open(source).convert("RGB")
+    
+    with st.status("🔍 Analyzing samples...", expanded=True) as status:
+        # AI Inference
+        results = model(img, conf=conf_level)
+        annotated_img = results[0].plot()
         
-        # Displaying Metrics in Glassmorphism cards
+        # Extract counts
+        caps = sum(1 for box in results[0].boxes if int(box.cls[0]) == 0)
+        tabs = sum(1 for box in results[0].boxes if int(box.cls[0]) == 1)
+        total = caps + tabs
+        
+        time.sleep(1) # For dramatic effect
+        status.update(label="Analysis Complete!", state="complete", expanded=False)
+
+    # Display Results in Modern Layout
+    col_img, col_stats = st.columns([2, 1])
+
+    with col_img:
+        st.image(annotated_img, caption="AI Detection Result", use_column_width=True)
+
+    with col_stats:
+        st.markdown("### Results Summary")
+        
+        # Metrics using custom Glassmorphism CSS
         st.markdown(f"""
-            <div class="metric-card">
-                <p style="color: #8b949e; margin-bottom: 5px;">Total Units</p>
-                <h2 style="color: #4CAF50; margin: 0;">{total}</h2>
-            </div>
-            <br>
-            <div class="metric-card">
-                <p style="color: #8b949e; margin-bottom: 5px;">Tablets Identified</p>
-                <h2 style="color: #64B5F6; margin: 0;">{tabs}</h2>
-            </div>
-            <br>
-            <div class="metric-card">
-                <p style="color: #8b949e; margin-bottom: 5px;">Capsules Identified</p>
-                <h2 style="color: #FFB74D; margin: 0;">{caps}</h2>
-            </div>
+        <div class="glass-card">
+            <small>TOTAL UNITS</small>
+            <h1 style="font-size: 50px; margin:0; color:#00ff88;">{total}</h1>
+        </div>
+        <div class="glass-card" style="border-left: 5px solid #ffcc00;">
+            <p style="margin:0;">💊 Capsules: <b>{caps}</b></p>
+        </div>
+        <div class="glass-card" style="border-left: 5px solid #00d4ff;">
+            <p style="margin:0;">⚪ Tablets: <b>{tabs}</b></p>
+        </div>
         """, unsafe_allow_html=True)
         
         if total > 0:
-            st.success("✅ Scanning Complete")
-            st.download_button("Export Report (.txt)", f"Pill Count Report\nTabs: {tabs}\nCaps: {caps}\nTotal: {total}")
+            st.balloons()
+            st.success("Verification successful.")
         else:
-            st.warning("No pills detected. Adjust the confidence slider in the sidebar.")
+            st.warning("No units detected. Try lowering the sensitivity in the sidebar.")
 
 else:
-    st.info("👈 Please upload an image or take a photo to begin.")
-    st_lottie(lottie_scan, height=300)
+    # Empty State with Animation
+    st.divider()
+    if lottie_scan:
+        st_lottie(lottie_scan, height=300, key="idle_ani")
+    else:
+        st.write("Awaiting Input...")
