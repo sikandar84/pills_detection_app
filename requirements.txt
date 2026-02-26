@@ -6,3 +6,5 @@ torchvision
 pyyaml
 Pillow 
 numpy
+streamlit-lottie
+requests
