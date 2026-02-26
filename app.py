@@ -3,62 +3,59 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import requests
-import time
 from streamlit_lottie import st_lottie
 
 # -------------------- App Config --------------------
-st.set_page_config(page_title="PillScan Ultra", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="PillScan Pro", layout="wide", initial_sidebar_state="collapsed")
 
-# -------------------- Advanced CSS: Neon & Glass --------------------
+# -------------------- Ultra-Compact CSS --------------------
 st.markdown("""
 <style>
-    /* 1. Animated Gradient Background */
-    .stApp {
-        background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1a2a6c);
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
+    /* 1. Fix app height to prevent scrolling */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+        height: 100vh;
     }
-    @keyframes gradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
+    
+    .stApp {
+        background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364);
+        overflow: hidden; /* Disable scroll */
     }
 
-    /* 2. Neon Glassmorphism Cards */
+    /* 2. Compact Neon Cards */
     .neon-card {
         background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(20px);
-        border-radius: 20px;
-        padding: 30px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 0 20px rgba(0, 255, 136, 0.1);
+        backdrop-filter: blur(15px);
+        border-radius: 12px;
+        padding: 10px 15px;
+        border: 1px solid rgba(0, 255, 136, 0.2);
         text-align: center;
-        margin-bottom: 25px;
-        transition: 0.4s;
-    }
-    .neon-card:hover {
-        border: 1px solid #00ff88;
-        box-shadow: 0 0 30px rgba(0, 255, 136, 0.4);
-        transform: scale(1.02);
+        margin-bottom: 10px;
     }
 
-    /* 3. Glowing Typography */
+    /* 3. Constrain Image Height */
+    .stImage > img {
+        max-height: 45vh !important;
+        width: auto !important;
+        margin-left: auto;
+        margin-right: auto;
+        border-radius: 10px;
+        border: 2px solid #00ff88;
+    }
+
     .ultra-title {
-        font-size: 4.5rem;
-        font-weight: 900;
+        font-size: 2.2rem !important;
+        font-weight: 800;
         background: linear-gradient(to right, #00ff88, #00d4ff);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.5));
-        letter-spacing: -2px;
         text-align: center;
-        margin-bottom: 0px;
+        margin-top: -20px;
     }
-
-    /* 4. Hide Default Streamlit Junk */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    
+    /* Minimize spacing */
+    .stMarkdown div { line-height: 1.2; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -70,13 +67,10 @@ def load_yolo():
 model = load_yolo()
 
 def load_lottie(url):
-    try:
-        return requests.get(url, timeout=5).json()
+    try: return requests.get(url, timeout=5).json()
     except: return None
 
-# Using high-energy colorful medical lotties
-lottie_main = load_lottie("https://lottie.host/8254c0e6-990a-422e-a510-7607771746c8/E6yH6GOfG8.json")
-lottie_scanning = load_lottie("https://lottie.host/f41e54c7-14e4-4112-8700-165c71a39643/9S7yO0n6yO.json")
+lottie_health = load_lottie("https://lottie.host/8254c0e6-990a-422e-a510-7607771746c8/E6yH6GOfG8.json")
 
 # -------------------- Detection Logic --------------------
 def get_counts(results):
@@ -87,17 +81,19 @@ def get_counts(results):
         elif cls == 1: tablets += 1
     return tablets, capsules, tablets + capsules
 
-# -------------------- UI Header --------------------
-st.markdown('<h1 class="ultra-title">PILLSCAN ULTRA</h1>', unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; color:#00ff88; font-weight:bold; letter-spacing:2px;'>VISION INTELLIGENCE 2026</p>", unsafe_allow_html=True)
+# -------------------- Header --------------------
+st.markdown('<h1 class="ultra-title">PILLSCAN PRO</h1>', unsafe_allow_html=True)
 
-# -------------------- Layout --------------------
-col_ctrl, col_disp = st.columns([1, 2])
+# -------------------- Main Interface --------------------
+# Split screen into Control (Left) and Results (Right)
+col_left, col_right = st.columns([1, 2.5])
 
-with col_ctrl:
+with col_left:
     st.markdown('<div class="neon-card">', unsafe_allow_html=True)
-    if lottie_main: st_lottie(lottie_main, height=150)
-    mode = st.radio("INTERFACE MODE", ["📁 UPLOAD", "📸 CAMERA"])
+    if lottie_health:
+        st_lottie(lottie_health, height=100, key="top_ani")
+    
+    mode = st.radio("SELECT INPUT", ["📁 UPLOAD", "📸 CAMERA"], horizontal=True)
     
     if mode == "📁 UPLOAD":
         source = st.file_uploader("", type=["jpg", "png", "jpeg"])
@@ -105,35 +101,30 @@ with col_ctrl:
         source = st.camera_input("")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------- Processing --------------------
+# -------------------- Processing & Output --------------------
 if source:
     img = Image.open(source).convert("RGB")
-    img_np = np.array(img)
-
-    with st.spinner("⚡ NEURAL OVERDRIVE ACTIVATED..."):
-        results = model(img_np)
-        annotated = results[0].plot()
-        tabs, caps, total = get_counts(results)
+    results = model(np.array(img))
+    annotated = results[0].plot()
+    tabs, caps, total = get_counts(results)
     
-    with col_disp:
-        # Image Display with neon border
-        st.markdown('<div class="neon-card">', unsafe_allow_html=True)
-        st.image(annotated, use_column_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Colorful Stats Row
-        stat1, stat2, stat3 = st.columns(3)
-        with stat1:
-            st.markdown(f'<div class="neon-card"><h4 style="color:#9ea4af;">TOTAL</h4><h1 style="color:#00ff88;">{total}</h1></div>', unsafe_allow_html=True)
-        with stat2:
-            st.markdown(f'<div class="neon-card"><h4 style="color:#9ea4af;">CAPSULES</h4><h1 style="color:#00d4ff;">{caps}</h1></div>', unsafe_allow_html=True)
-        with stat3:
-            st.markdown(f'<div class="neon-card"><h4 style="color:#9ea4af;">TABLETS</h4><h1 style="color:#ff00ff;">{tabs}</h1></div>', unsafe_allow_html=True)
+    with col_right:
+        # 1. Metrics Row (Top)
+        m1, m2, m3 = st.columns(3)
+        m1.markdown(f'<div class="neon-card"><small>TOTAL</small><h2 style="color:#00ff88; margin:0;">{total}</h2></div>', unsafe_allow_html=True)
+        m2.markdown(f'<div class="neon-card"><small>CAPSULES</small><h2 style="color:#00d4ff; margin:0;">{caps}</h2></div>', unsafe_allow_html=True)
+        m3.markdown(f'<div class="neon-card"><small>TABLETS</small><h2 style="color:#ff00ff; margin:0;">{tabs}</h2></div>', unsafe_allow_html=True)
         
-        st.balloons()
+        # 2. Scanned Image (Middle) - CSS Constrained to 45% of Screen Height
+        st.image(annotated, use_column_width=False)
+        
+        # 3. Quick Action
+        if st.button("🗑️ Clear Scan", use_container_width=True):
+            st.rerun()
 else:
-    with col_disp:
-        if lottie_scanning:
-            st_lottie(lottie_scanning, height=500)
-        else:
-            st.info("System Ready. Awaiting Visual Input...")
+    with col_right:
+        st.markdown("""
+        <div style="height: 60vh; display: flex; align-items: center; justify-content: center; border: 2px dashed rgba(255,255,255,0.1); border-radius: 20px;">
+            <p style="color: #666; font-size: 1.2rem;">Awaiting Image Input for Neural Analysis...</p>
+        </div>
+        """, unsafe_allow_html=True)
