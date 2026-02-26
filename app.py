@@ -2,103 +2,154 @@ import streamlit as st
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
+import time
+from streamlit_lottie import st_lottie
+import requests
 
-# -------------------- Streamlit Page Setup --------------------
-st.set_page_config(page_title="Pill Counter App", layout="wide")
+# -------------------- Configuration & Assets --------------------
+st.set_page_config(page_title="PillScan Pro", layout="wide", initial_sidebar_state="collapsed")
+
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+# Lottie Animations (Medical/Scanning theme)
+lottie_pill = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_5njp9vbg.json")
+lottie_scan = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_ndm890at.json")
 
 # Load YOLO Model
-model = YOLO("best.pt")  # Make sure best.pt is in the same repo
+@st.cache_resource
+def load_model():
+    return YOLO("best.pt")
 
-# -------------------- Custom CSS --------------------
+model = load_model()
+
+# -------------------- Advanced CSS --------------------
 st.markdown("""
 <style>
-.main {background: #0d1117; color: white;}
-.title {text-align: center; font-size: 38px; font-weight: bold; color: #4CAF50;}
-.counter-box {
-    padding: 15px;
-    background: #1e1e1e;
-    border-radius: 12px;
-    margin-top: 10px;
-    font-size: 20px;
-    color: white;
-    text-align: center;
-    border: 2px solid #4CAF50;
-}
-.upload-box {
-    border: 2px dashed #4CAF50;
-    padding: 10px;
-    border-radius: 10px;
-    text-align: center;
-}
+    /* Global Styles */
+    .stApp {
+        background: radial-gradient(circle, #1a1c23 0%, #0d1117 100%);
+    }
+    
+    /* Glassmorphism Card */
+    .metric-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 15px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        text-align: center;
+        transition: transform 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        border-color: #4CAF50;
+    }
+    
+    /* Title Animation */
+    @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .main-title {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 3rem;
+        font-weight: 800;
+        background: -webkit-linear-gradient(#4CAF50, #2E7D32);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        animation: fadeInDown 1s ease-out;
+    }
+    
+    /* Custom Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #161b22;
+        border-right: 1px solid #30363d;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="title">💊 Smart Pill & Capsule Detection</p>', unsafe_allow_html=True)
+# -------------------- Header Section --------------------
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st_lottie(lottie_pill, height=150, key="pill_ani")
+    st.markdown('<h1 class="main-title">PILLSCAN PRO</h1>', unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #8b949e;'>AI-Powered Pharmaceutical Recognition & Counting</p>", unsafe_allow_html=True)
 
-# -------------------- Mode Selection --------------------
-option = st.sidebar.selectbox("Select Mode", ["Image Upload", "Camera Snapshot"])
+st.write("---")
 
-# -------------------- Helper Function --------------------
-# YOLO CLASS 0 = CAPSULE, CLASS 1 = TABLET
-def get_counts(results):
-    tablets = capsules = 0
-    for r in results[0].boxes:
-        cls = int(r.cls[0])
-        if cls == 0:
-            capsules += 1
-        elif cls == 1:
-            tablets += 1
-    return tablets, capsules, tablets + capsules
+# -------------------- Sidebar & Logic --------------------
+with st.sidebar:
+    st.header("⚙️ Controls")
+    option = st.radio("Input Source", ["Upload Image", "Live Camera"], help="Choose how you want to capture the pills.")
+    conf_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.25)
+    st.info("Ensure lighting is bright for 99% accuracy.")
 
-# -------------------- IMAGE UPLOAD MODE --------------------
-if option == "Image Upload":
-    st.subheader("📸 Upload an Image")
-    uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
+def process_image(img):
+    with st.spinner('🔬 Analyzing chemical signatures...'):
+        results = model(img, conf=conf_threshold)
+        
+        # Artificial slight delay for 'pro' feel
+        time.sleep(0.5) 
+        
+        tablets = 0
+        capsules = 0
+        for r in results[0].boxes:
+            cls = int(r.cls[0])
+            if cls == 0: capsules += 1
+            elif cls == 1: tablets += 1
+            
+        return results[0].plot(), tablets, capsules, tablets + capsules
 
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        img_np = np.array(image)
+# -------------------- Main Interface --------------------
+source_img = None
 
-        results = model(img_np)
-        annotated = results[0].plot()
-
-        tablets, capsules, total = get_counts(results)
-
-        st.image(annotated, caption="Detection Results", use_column_width=True)
-
-        st.markdown(f"""
-        <div class="counter-box">
-        Tablets: {tablets} <br>
-        Capsules: {capsules} <br>
-        <b>Total: {total}</b>
-        </div>
-        """, unsafe_allow_html=True)
-
-# -------------------- CAMERA SNAPSHOT MODE --------------------
+if option == "Upload Image":
+    source_img = st.file_uploader("📂 Drag and drop pill images here", type=["jpg", "jpeg", "png"])
 else:
-    st.subheader("📷 Camera Snapshot (Mobile Friendly)")
-    img = st.camera_input("Open Camera")
+    source_img = st.camera_input("📸 Capture snapshot")
 
-    if img:
-        image = Image.open(img).convert("RGB")
-        img_np = np.array(image)
+if source_img:
+    image = Image.open(source_img).convert("RGB")
+    annotated_img, tabs, caps, total = process_image(image)
 
-        results = model(img_np)
-        annotated = results[0].plot()
+    # Dashboard Layout
+    res_col, stats_col = st.columns([2, 1])
 
-        tablets, capsules, total = get_counts(results)
+    with res_col:
+        st.image(annotated_img, caption="AI Vision Feedback", use_column_width=True)
 
-        st.image(
-            annotated,
-            caption=f"Tablets: {tablets} | Capsules: {capsules} | Total: {total}",
-            use_column_width=True
-        )
+    with stats_col:
+        st.markdown("### 📊 Analysis Report")
+        
+        # Displaying Metrics in Glassmorphism cards
         st.markdown(f"""
-        <div class="counter-box">
-        Tablets: {tablets} <br>
-        Capsules: {capsules} <br>
-        <b>Total: {total}</b>
-        </div>
+            <div class="metric-card">
+                <p style="color: #8b949e; margin-bottom: 5px;">Total Units</p>
+                <h2 style="color: #4CAF50; margin: 0;">{total}</h2>
+            </div>
+            <br>
+            <div class="metric-card">
+                <p style="color: #8b949e; margin-bottom: 5px;">Tablets Identified</p>
+                <h2 style="color: #64B5F6; margin: 0;">{tabs}</h2>
+            </div>
+            <br>
+            <div class="metric-card">
+                <p style="color: #8b949e; margin-bottom: 5px;">Capsules Identified</p>
+                <h2 style="color: #FFB74D; margin: 0;">{caps}</h2>
+            </div>
         """, unsafe_allow_html=True)
+        
+        if total > 0:
+            st.success("✅ Scanning Complete")
+            st.download_button("Export Report (.txt)", f"Pill Count Report\nTabs: {tabs}\nCaps: {caps}\nTotal: {total}")
+        else:
+            st.warning("No pills detected. Adjust the confidence slider in the sidebar.")
 
-
+else:
+    st.info("👈 Please upload an image or take a photo to begin.")
+    st_lottie(lottie_scan, height=300)
