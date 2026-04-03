@@ -5,7 +5,6 @@ from PIL import Image
 import requests
 import time
 from streamlit_lottie import st_lottie
-
 # -------------------- App Config --------------------
 st.set_page_config(page_title="PillScan Pro", layout="wide", initial_sidebar_state="collapsed")
 
